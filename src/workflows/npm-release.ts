@@ -21,9 +21,12 @@ function buildOnBlock(trigger: TReleaseTrigger): string {
   workflow_dispatch:`
 }
 
-function registryUrl(registry: TRegistry): string {
-  if (registry === "github") return "https://npm.pkg.github.com"
-  return "https://registry.npmjs.org"
+function pnpmSetupStep(packageManager: TPackageManager): string {
+  if (packageManager !== "pnpm") return ""
+  return `
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+`
 }
 
 export function generateNpmRelease(params: INpmReleaseParams): string {
@@ -32,6 +35,46 @@ export function generateNpmRelease(params: INpmReleaseParams): string {
   const cacheKey = packageManager === "npm" ? "npm" : packageManager
   const buildCmd =
     packageManager === "npm" ? "npm run build" : `${packageManager} build`
+
+  if (registry === "npmjs") {
+    return `name: Release
+
+${buildOnBlock(trigger)}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+${pnpmSetupStep(packageManager)}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: '${cacheKey}'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: ${installCmd}
+
+      - name: Build
+        run: ${buildCmd}
+
+      - name: Remove injected auth token to enable OIDC
+        run: npm config delete //registry.npmjs.org/:_authToken
+
+      - name: Publish
+        run: npm publish --provenance --access public
+`
+  }
+
   const publishCmd =
     packageManager === "npm" ? "npm publish" : `${packageManager} publish`
 
@@ -44,13 +87,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+${pnpmSetupStep(packageManager)}
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: '${cacheKey}'
-          registry-url: '${registryUrl(registry)}'
+          registry-url: 'https://npm.pkg.github.com'
 
       - name: Install dependencies
         run: ${installCmd}

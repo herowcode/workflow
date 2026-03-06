@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process"
 import * as p from "@clack/prompts"
 import pc from "picocolors"
 import { detectPackageManager } from "./detect"
@@ -5,6 +6,60 @@ import { generateCiTest } from "./workflows/ci-test"
 import { generateDockerBlueGreen } from "./workflows/docker-blue-green"
 import { generateNpmRelease } from "./workflows/npm-release"
 import { writeWorkflow } from "./write"
+
+function checkSecrets(required: string[]): {
+  configured: string[]
+  missing: string[]
+} {
+  if (required.length === 0) return { configured: [], missing: [] }
+
+  const inGitRepo =
+    spawnSync("git", ["rev-parse", "--git-dir"], { stdio: "ignore" }).status ===
+    0
+  if (!inGitRepo) return { configured: [], missing: required }
+
+  const ghAvailable =
+    spawnSync("gh", ["--version"], { stdio: "ignore" }).status === 0
+  if (!ghAvailable) return { configured: [], missing: required }
+
+  const result = spawnSync("gh", ["secret", "list", "--json", "name"], {
+    encoding: "utf8",
+  })
+  if (result.status !== 0) return { configured: [], missing: required }
+
+  try {
+    const list = JSON.parse(result.stdout) as Array<{ name: string }>
+    const names = list.map((s) => s.name)
+    return {
+      configured: required.filter((s) => names.includes(s)),
+      missing: required.filter((s) => !names.includes(s)),
+    }
+  } catch {
+    return { configured: [], missing: required }
+  }
+}
+
+function secretsSummary(secrets: string[]): string {
+  if (secrets.length === 0) return ""
+
+  const { configured, missing } = checkSecrets(secrets)
+  const resolvedByGh = configured.length + missing.length === secrets.length
+
+  if (resolvedByGh) {
+    const lines = [
+      "",
+      "",
+      "  Required GitHub secrets:",
+      ...configured.map(
+        (s) => `    ${pc.green("✓")} ${pc.dim(s)} ${pc.dim("(already set)")}`,
+      ),
+      ...missing.map((s) => `    ${pc.yellow("•")} ${pc.yellow(s)}`),
+    ]
+    return lines.join("\n")
+  }
+
+  return `\n\n  Required GitHub secrets:\n${secrets.map((s) => `    • ${pc.yellow(s)}`).join("\n")}`
+}
 
 export async function main() {
   p.intro(pc.bgCyan(pc.black(" @herowcode/workflow ")))
@@ -60,7 +115,7 @@ export async function main() {
     }
 
     const envFilePath = await p.text({
-      message: "Env file path on VPS (e.g. ~/whatsapp/.env)",
+      message: "Env file path on VPS (e.g. ~/api/.env)",
       placeholder: "~/.env",
       validate: (v) => (v.trim() ? undefined : "Env file path is required"),
     })
@@ -101,8 +156,8 @@ export async function main() {
   } else if (workflow === "ci-test") {
     const nodeVersion = await p.text({
       message: "Node.js version",
-      placeholder: "20",
-      initialValue: "20",
+      placeholder: "24",
+      initialValue: "24",
     })
     if (p.isCancel(nodeVersion)) {
       p.cancel("Operation cancelled.")
@@ -127,7 +182,7 @@ export async function main() {
 
     const pm = detectPackageManager()
     content = generateCiTest({
-      nodeVersion: nodeVersion.trim() || "20",
+      nodeVersion: nodeVersion.trim() || "24",
       trigger: trigger as "push-and-pr" | "push-only" | "pr-only",
       packageManager: pm,
     })
@@ -149,7 +204,7 @@ export async function main() {
     const registry = await p.select({
       message: "Publish registry",
       options: [
-        { value: "npmjs", label: "npmjs.com" },
+        { value: "npmjs", label: "npmjs.com (OIDC — no secrets required)" },
         { value: "github", label: "GitHub Packages" },
       ],
     })
@@ -165,16 +220,12 @@ export async function main() {
       packageManager: pm,
     })
     filename = "release"
-    secrets = ["NODE_AUTH_TOKEN"]
+    secrets = registry === "npmjs" ? [] : ["NODE_AUTH_TOKEN"]
   }
 
   const filePath = writeWorkflow(filename, content)
 
   p.outro(
-    `${pc.green("✓")} Written to ${pc.cyan(filePath)}${
-      secrets.length > 0
-        ? `\n\n  Required GitHub secrets:\n${secrets.map((s) => `    • ${pc.yellow(s)}`).join("\n")}`
-        : ""
-    }`,
+    `${pc.green("✓")} Written to ${pc.cyan(filePath)}${secretsSummary(secrets)}`,
   )
 }

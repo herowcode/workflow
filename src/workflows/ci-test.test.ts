@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { generateCiTest } from "./ci-test"
 
 const baseParams = {
-  nodeVersion: "20",
+  nodeVersion: "24",
   trigger: "push-and-pr" as const,
   packageManager: "pnpm" as const,
 }
@@ -15,7 +15,7 @@ describe("generateCiTest", () => {
 
   it("uses correct node version", () => {
     const yaml = generateCiTest(baseParams)
-    expect(yaml).toContain("node-version: '20'")
+    expect(yaml).toContain("node-version: '24'")
   })
 
   it("uses custom node version", () => {

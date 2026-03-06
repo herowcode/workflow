@@ -39,7 +39,7 @@ No installation required. Run it from the root of any project.
 
 The wizard auto-detects your package manager from lockfiles (`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, `package-lock.json`) and asks only the questions relevant to the workflow you selected.
 
-When done, it writes `.github/workflows/<name>.yml` and prints the required GitHub secrets.
+When done, it writes `.github/workflows/<name>.yml` and prints the required GitHub secrets. If you're inside a git repository and have the `gh` CLI available, it checks which secrets are already configured and highlights any that are missing.
 
 ---
 
@@ -100,7 +100,7 @@ Runs lint and tests on every push or pull request.
 
 | Question | Default |
 |---|---|
-| Node.js version | `20` |
+| Node.js version | `24` |
 | Trigger | push to main + pull requests |
 
 Package manager and install command are auto-detected from your lockfile.
@@ -126,13 +126,16 @@ Publishes your package to npmjs.com or GitHub Packages on tag push or manual tri
 | Question | Options |
 |---|---|
 | Trigger | Tag push (`v*`) / Manual dispatch |
-| Registry | npmjs.com / GitHub Packages |
+| Registry | npmjs.com (OIDC — no secrets required) / GitHub Packages |
 
 **Required GitHub secrets:**
 
-| Secret | Description |
+| Registry | Secret needed |
 |---|---|
-| `NODE_AUTH_TOKEN` | npm publish token |
+| npmjs.com | None — uses OIDC Trusted Publishing |
+| GitHub Packages | `NODE_AUTH_TOKEN` |
+
+When targeting **npmjs.com**, the generated workflow uses OIDC Trusted Publishing: it upgrades npm to v11+, clears the auth token injected by `actions/setup-node`, and publishes with `--provenance`. No long-lived token required — [configure a Trusted Publisher](https://docs.npmjs.com/trusted-publishers) on npmjs.com to match your repo and workflow file.
 
 ---
 

@@ -31,7 +31,8 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Remove injected auth token to enable OIDC
+        run: npm config delete //registry.npmjs.org/:_authToken
+
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: '' # Clear GITHUB_TOKEN injected by setup-node; OIDC handles auth

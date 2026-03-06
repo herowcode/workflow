@@ -31,8 +31,17 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Remove injected auth token to enable OIDC
         run: npm config delete //registry.npmjs.org/:_authToken
+
+      - name: Debug npm env
+        run: |
+          npm --version
+          npm config get //registry.npmjs.org/:_authToken || echo "no token"
+          echo "OIDC URL: $ACTIONS_ID_TOKEN_REQUEST_URL"
 
       - name: Publish
         run: npm publish --provenance --access public

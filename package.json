@@ -1,0 +1,53 @@
+{
+  "name": "@herowcode/workflow",
+  "version": "1.0.0",
+  "description": "CLI wizard to generate GitHub Actions workflows for herowcode projects",
+  "bin": {
+    "workflow": "./dist/cli.cjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup --config tsup.config.ts && chmod +x dist/cli.cjs",
+    "lint": "biome check --write --unsafe && tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "version:patch": "pnpm lint && pnpm test:run && pnpm build && npm version patch && git push && git push --tags",
+    "version:minor": "pnpm lint && pnpm test:run && pnpm build && npm version minor && git push && git push --tags",
+    "version:major": "pnpm lint && pnpm test:run && pnpm build && npm version major && git push && git push --tags"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.1.4",
+    "@types/node": "22.12.0",
+    "@vitest/coverage-v8": "3.2.4",
+    "tsup": "8.5.1",
+    "typescript": "^5.2.2",
+    "vitest": "3.2.4"
+  },
+  "author": {
+    "name": "Judson Junior",
+    "email": "judson.junior@herowcode.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/herowcode/workflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/herowcode/workflow/issues"
+  },
+  "homepage": "https://github.com/herowcode/workflow#readme",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@biomejs/biome"
+    ]
+  },
+  "packageManager": "pnpm@10.30.1"
+}

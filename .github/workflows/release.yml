@@ -33,3 +33,5 @@ jobs:
 
       - name: Publish
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: '' # Clear GITHUB_TOKEN injected by setup-node; OIDC handles auth

@@ -61,6 +61,8 @@ export function generateDockerBlueGreen(
 
             if [ "$HEALTHY" = "false" ]; then
               echo "Health check failed, rolling back"
+              echo "Container logs (last 50 lines):"
+              docker logs --tail 50 ${appName}-green || echo "Unable to fetch logs from ${appName}-green"
               docker rm -f ${appName}-green
               exit 1
             fi
@@ -78,6 +80,8 @@ export function generateDockerBlueGreen(
 
             if [ "$HEALTHY" = "false" ]; then
               echo "Container health check failed (container not running), rolling back"
+              echo "Container logs (last 50 lines):"
+              docker logs --tail 50 ${appName}-green || echo "Unable to fetch logs from ${appName}-green"
               docker rm -f ${appName}-green
               exit 1
             fi

@@ -120,6 +120,15 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("rolling back")
   })
 
+  it("prints green container logs when curl health check fails", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain('echo "Container logs (last 50 lines):"')
+    expect(yaml).toContain("docker logs --tail 50 herowcode-api-green")
+    expect(yaml).toContain(
+      'echo "Unable to fetch logs from herowcode-api-green"',
+    )
+  })
+
   it("uses custom health endpoint when provided", () => {
     const yaml = generateDockerBlueGreen({
       ...baseParams,
@@ -143,6 +152,18 @@ describe("generateDockerBlueGreen", () => {
     )
     expect(yaml).not.toContain("CONTAINER_IP")
     expect(yaml).not.toContain("curl")
+  })
+
+  it("prints green container logs when status health check fails", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      healthEndpoint: "",
+    })
+    expect(yaml).toContain('echo "Container logs (last 50 lines):"')
+    expect(yaml).toContain("docker logs --tail 50 herowcode-api-green")
+    expect(yaml).toContain(
+      'echo "Unable to fetch logs from herowcode-api-green"',
+    )
   })
 
   it("defaults to /health endpoint when healthEndpoint is not provided", () => {

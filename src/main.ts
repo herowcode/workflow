@@ -103,13 +103,24 @@ export async function main() {
       process.exit(0)
     }
 
-    const port = await p.text({
-      message: "Container port (e.g. 4000)",
+    const containerPort = await p.text({
+      message: "Container port — internal port the app listens on (e.g. 4000)",
       placeholder: "3000",
       validate: (v) =>
         /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
     })
-    if (p.isCancel(port)) {
+    if (p.isCancel(containerPort)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
+    const vpsPort = await p.text({
+      message: "VPS port — port exposed on 127.0.0.1 of the VPS (e.g. 8080)",
+      placeholder: containerPort as string,
+      validate: (v) =>
+        /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
+    })
+    if (p.isCancel(vpsPort)) {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
@@ -120,6 +131,34 @@ export async function main() {
       validate: (v) => (v.trim() ? undefined : "Env file path is required"),
     })
     if (p.isCancel(envFilePath)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
+    const team = await p.select({
+      message: "Team responsible for this app",
+      options: [
+        { value: "FRONT", label: "FRONT" },
+        { value: "BACK", label: "BACK" },
+        { value: "API", label: "API" },
+        { value: "BOT", label: "BOT" },
+        { value: "OTHER", label: "OTHER" },
+      ],
+    })
+    if (p.isCancel(team)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
+    const environment = await p.select({
+      message: "Deployment environment",
+      options: [
+        { value: "production", label: "production" },
+        { value: "staging", label: "staging" },
+        { value: "development", label: "development" },
+      ],
+    })
+    if (p.isCancel(environment)) {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
@@ -146,13 +185,16 @@ export async function main() {
     content = generateDockerBlueGreen({
       appName: appName.trim(),
       dockerNetwork: dockerNetwork.trim(),
-      port: port.trim(),
+      containerPort: (containerPort as string).trim(),
+      vpsPort: (vpsPort as string).trim(),
       envFilePath: envFilePath.trim(),
+      team: team as "FRONT" | "BACK" | "API" | "BOT" | "OTHER",
+      environment: environment as "production" | "staging" | "development",
       volumeMount: volumeMount?.trim() || undefined,
       infraServices: infraServices?.trim() || undefined,
     })
     filename = "deploy"
-    secrets = ["VPS_HOST", "VPS_SSH_KEY", "GHCR_TOKEN"]
+    secrets = ["VPS_HOST", "VPS_SSH_KEY"]
   } else if (workflow === "ci-test") {
     const nodeVersion = await p.text({
       message: "Node.js version",

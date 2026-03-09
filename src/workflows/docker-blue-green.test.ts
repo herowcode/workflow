@@ -4,8 +4,11 @@ import { generateDockerBlueGreen } from "./docker-blue-green"
 const baseParams = {
   appName: "herowcode-api",
   dockerNetwork: "herowcode",
-  port: "4000",
+  containerPort: "4000",
+  vpsPort: "8080",
   envFilePath: "~/whatsapp/.env",
+  team: "API" as const,
+  environment: "production" as const,
 }
 
 describe("generateDockerBlueGreen", () => {
@@ -20,12 +23,26 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("- 'v*'")
   })
 
-  it("includes GHCR login step", () => {
+  it("includes workflow_dispatch trigger", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("workflow_dispatch:")
+  })
+
+  it("includes permissions for GHCR", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("permissions:")
+    expect(yaml).toContain("contents: read")
+    expect(yaml).toContain("packages: write")
+  })
+
+  it("includes GHCR login step with GITHUB_TOKEN", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("docker/login-action@v3")
     expect(yaml).toContain("registry: ghcr.io")
     // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
-    expect(yaml).toContain("${{ secrets.GHCR_TOKEN }}")
+    expect(yaml).toContain("${{ secrets.GITHUB_TOKEN }}")
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
+    expect(yaml).not.toContain("${{ secrets.GHCR_TOKEN }}")
   })
 
   it("includes docker metadata with app name", () => {
@@ -49,17 +66,46 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("${{ secrets.VPS_SSH_KEY }}")
   })
 
-  it("includes network, port, and env file", () => {
+  it("includes network, port binding, and env file", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("--network herowcode")
-    expect(yaml).toContain("-p 127.0.0.1:4000:4000")
+    expect(yaml).toContain("-p 127.0.0.1:8080:4000")
     expect(yaml).toContain("--env-file ~/whatsapp/.env")
+  })
+
+  it("creates network if it does not exist", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain(
+      "docker network inspect herowcode > /dev/null 2>&1 || docker network create herowcode",
+    )
+  })
+
+  it("includes container labels", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("--label app=herowcode-api")
+    expect(yaml).toContain("--label environment=production")
+    expect(yaml).toContain("--label team=API")
+  })
+
+  it("reflects team and environment in labels", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      team: "FRONT",
+      environment: "staging",
+    })
+    expect(yaml).toContain("--label environment=staging")
+    expect(yaml).toContain("--label team=FRONT")
   })
 
   it("includes blue-green container names", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("herowcode-api-green")
     expect(yaml).toContain("herowcode-api-blue")
+  })
+
+  it("health check uses vpsPort", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("http://localhost:8080/health")
   })
 
   it("includes health check loop", () => {

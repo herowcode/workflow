@@ -1,8 +1,14 @@
+export type TDockerTeam = "FRONT" | "BACK" | "API" | "BOT" | "OTHER"
+export type TDockerEnvironment = "production" | "staging" | "development"
+
 export interface IDockerBlueGreenParams {
   appName: string
   dockerNetwork: string
-  port: string
+  containerPort: string
+  vpsPort: string
   envFilePath: string
+  team: TDockerTeam
+  environment: TDockerEnvironment
   volumeMount?: string
   infraServices?: string
 }
@@ -13,8 +19,11 @@ export function generateDockerBlueGreen(
   const {
     appName,
     dockerNetwork,
-    port,
+    containerPort,
+    vpsPort,
     envFilePath,
+    team,
+    environment,
     volumeMount,
     infraServices,
   } = params
@@ -39,6 +48,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-push:
@@ -53,7 +67,7 @@ jobs:
         with:
           registry: ghcr.io
           username: \${{ github.actor }}
-          password: \${{ secrets.GHCR_TOKEN }}
+          password: \${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -85,18 +99,23 @@ jobs:
           script: |
             IMAGE=$(echo "\${{ needs.build-and-push.outputs.image }}" | head -n1)
 ${infraCheckBlock}
+            docker network inspect ${dockerNetwork} > /dev/null 2>&1 || docker network create ${dockerNetwork}
+
             docker pull $IMAGE
 
             docker run -d \\
               --name ${appName}-green \\
               --network ${dockerNetwork} \\
               --env-file ${envFilePath} \\
-              -p 127.0.0.1:${port}:${port}${volumeFlag} \\
+              -p 127.0.0.1:${vpsPort}:${containerPort} \\
+              --label app=${appName} \\
+              --label environment=${environment} \\
+              --label team=${team}${volumeFlag} \\
               $IMAGE
 
             HEALTHY=false
             for i in $(seq 1 20); do
-              if curl -sf http://localhost:${port}/health > /dev/null 2>&1; then
+              if curl -sf http://localhost:${vpsPort}/health > /dev/null 2>&1; then
                 HEALTHY=true
                 break
               fi

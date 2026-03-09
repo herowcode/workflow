@@ -100,7 +100,7 @@ describe("generateDockerBlueGreen", () => {
   it("includes blue-green container names", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("herowcode-api-green")
-    expect(yaml).toContain("herowcode-api-blue")
+    expect(yaml).toContain("herowcode-api")
   })
 
   it("health check uses vpsPort", () => {

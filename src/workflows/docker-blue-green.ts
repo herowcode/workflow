@@ -136,8 +136,8 @@ ${infraCheckBlock}
               exit 1
             fi
 
-            docker rm -f ${appName}-blue 2>/dev/null || true
-            docker rename ${appName}-green ${appName}-blue
+            docker rm -f ${appName} 2>/dev/null || true
+            docker rename ${appName}-green ${appName}
             docker logout ghcr.io
             echo "Deployment successful"
 `

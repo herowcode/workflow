@@ -60,7 +60,7 @@ A zero-downtime deployment pipeline using a blue-green container swap on your VP
    - Pulls the new image
    - Starts a new `<app>-green` container on the configured network, port, and env file
    - Runs a health check loop (20 attempts × 5s)
-   - If healthy: removes the old `<app>-blue` and renames green → blue
+   - If healthy: removes the old `<app>` and renames green → blue
    - If unhealthy: removes the green container and exits with failure (rollback)
 
 **Questions asked:**

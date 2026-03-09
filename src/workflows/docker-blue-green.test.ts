@@ -105,7 +105,9 @@ describe("generateDockerBlueGreen", () => {
 
   it("health check uses container IP with curl (not docker exec)", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).toContain("CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' herowcode-api-green)")
+    expect(yaml).toContain(
+      "CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' herowcode-api-green)",
+    )
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Shell script variable syntax
     expect(yaml).toContain('curl -sf "http://${CONTAINER_IP}:4000/health"')
     expect(yaml).not.toContain("docker exec")
@@ -132,9 +134,13 @@ describe("generateDockerBlueGreen", () => {
       ...baseParams,
       healthEndpoint: "",
     })
-    expect(yaml).toContain('docker ps --filter "name=herowcode-api-green" --filter "status=running"')
+    expect(yaml).toContain(
+      'docker ps --filter "name=herowcode-api-green" --filter "status=running"',
+    )
     expect(yaml).toContain("Waiting for container... attempt")
-    expect(yaml).toContain("Container health check failed (container not running)")
+    expect(yaml).toContain(
+      "Container health check failed (container not running)",
+    )
     expect(yaml).not.toContain("CONTAINER_IP")
     expect(yaml).not.toContain("curl")
   })

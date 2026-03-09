@@ -141,4 +141,40 @@ describe("generateDockerBlueGreen", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).not.toContain("aborting deploy")
   })
+
+  it("uses 'deploy' as default SSH username", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("username: deploy")
+  })
+
+  it("uses custom SSH username when vpsUser is provided", () => {
+    const yaml = generateDockerBlueGreen({ ...baseParams, vpsUser: "ubuntu" })
+    expect(yaml).toContain("username: ubuntu")
+    expect(yaml).not.toContain("username: deploy")
+  })
+
+  it("passes GITHUB_TOKEN as env var to deploy step", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("env:")
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
+    expect(yaml).toContain("GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}")
+    expect(yaml).toContain("envs: GITHUB_TOKEN")
+  })
+
+  it("logs in to GHCR before docker pull", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    const loginIdx = yaml.indexOf("docker login ghcr.io")
+    const pullIdx = yaml.indexOf("docker pull $IMAGE")
+    expect(loginIdx).toBeGreaterThan(-1)
+    expect(pullIdx).toBeGreaterThan(-1)
+    expect(loginIdx).toBeLessThan(pullIdx)
+  })
+
+  it("logs out of GHCR after deployment", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    const logoutIdx = yaml.indexOf("docker logout ghcr.io")
+    const successIdx = yaml.indexOf("Deployment successful")
+    expect(logoutIdx).toBeGreaterThan(-1)
+    expect(logoutIdx).toBeLessThan(successIdx)
+  })
 })

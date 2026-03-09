@@ -135,6 +135,15 @@ export async function main() {
       process.exit(0)
     }
 
+    const vpsUser = await p.text({
+      message: "VPS SSH username (e.g. ubuntu, deploy)",
+      placeholder: "deploy",
+    })
+    if (p.isCancel(vpsUser)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
     const team = await p.select({
       message: "Team responsible for this app",
       options: [
@@ -190,6 +199,7 @@ export async function main() {
       envFilePath: envFilePath.trim(),
       team: team as "FRONT" | "BACK" | "API" | "BOT" | "OTHER",
       environment: environment as "production" | "staging" | "development",
+      vpsUser: (vpsUser as string)?.trim() || undefined,
       volumeMount: volumeMount?.trim() || undefined,
       infraServices: infraServices?.trim() || undefined,
     })

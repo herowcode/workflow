@@ -9,6 +9,7 @@ export interface IDockerBlueGreenParams {
   envFilePath: string
   team: TDockerTeam
   environment: TDockerEnvironment
+  vpsUser?: string
   volumeMount?: string
   infraServices?: string
 }
@@ -24,6 +25,7 @@ export function generateDockerBlueGreen(
     envFilePath,
     team,
     environment,
+    vpsUser = "deploy",
     volumeMount,
     infraServices,
   } = params
@@ -92,14 +94,19 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         with:
           host: \${{ secrets.VPS_HOST }}
-          username: deploy
+          username: ${vpsUser}
           key: \${{ secrets.VPS_SSH_KEY }}
+          envs: GITHUB_TOKEN
           script: |
             IMAGE=$(echo "\${{ needs.build-and-push.outputs.image }}" | head -n1)
 ${infraCheckBlock}
             docker network inspect ${dockerNetwork} > /dev/null 2>&1 || docker network create ${dockerNetwork}
+
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u \${{ github.actor }} --password-stdin
 
             docker pull $IMAGE
 
@@ -131,6 +138,7 @@ ${infraCheckBlock}
 
             docker rm -f ${appName}-blue 2>/dev/null || true
             docker rename ${appName}-green ${appName}-blue
+            docker logout ghcr.io
             echo "Deployment successful"
 `
 }

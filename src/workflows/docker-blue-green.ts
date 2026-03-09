@@ -12,6 +12,7 @@ export interface IDockerBlueGreenParams {
   vpsUser?: string
   volumeMount?: string
   infraServices?: string
+  healthEndpoint?: string
 }
 
 export function generateDockerBlueGreen(
@@ -28,6 +29,7 @@ export function generateDockerBlueGreen(
     vpsUser = "deploy",
     volumeMount,
     infraServices,
+    healthEndpoint = "/health",
   } = params
 
   const volumeFlag = volumeMount ? `\n              -v ${volumeMount} \\` : ""
@@ -43,6 +45,43 @@ export function generateDockerBlueGreen(
             done
 `
     : ""
+
+  const healthCheckBlock = healthEndpoint
+    ? `
+            HEALTHY=false
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${appName}-green)
+            for i in $(seq 1 20); do
+              if curl -sf "http://\${CONTAINER_IP}:${containerPort}${healthEndpoint}" > /dev/null 2>&1; then
+                HEALTHY=true
+                break
+              fi
+              echo "Waiting... attempt $i/20"
+              sleep 5
+            done
+
+            if [ "$HEALTHY" = "false" ]; then
+              echo "Health check failed, rolling back"
+              docker rm -f ${appName}-green
+              exit 1
+            fi
+`
+    : `
+            HEALTHY=false
+            for i in $(seq 1 20); do
+              if docker ps --filter "name=${appName}-green" --filter "status=running" -q | grep -q .; then
+                HEALTHY=true
+                break
+              fi
+              echo "Waiting for container... attempt $i/20"
+              sleep 5
+            done
+
+            if [ "$HEALTHY" = "false" ]; then
+              echo "Container health check failed (container not running), rolling back"
+              docker rm -f ${appName}-green
+              exit 1
+            fi
+`
 
   return `name: Deploy ${appName}
 
@@ -118,23 +157,7 @@ ${infraCheckBlock}
               --label environment=${environment} \\
               --label team=${team}${volumeFlag} \\
               $IMAGE
-
-            HEALTHY=false
-            for i in $(seq 1 20); do
-              if docker exec ${appName}-green curl -sf http://localhost:${containerPort}/health > /dev/null 2>&1; then
-                HEALTHY=true
-                break
-              fi
-              echo "Waiting... attempt $i/20"
-              sleep 5
-            done
-
-            if [ "$HEALTHY" = "false" ]; then
-              echo "Health check failed, rolling back"
-              docker rm -f ${appName}-green
-              exit 1
-            fi
-
+${healthCheckBlock}
             docker rm -f ${appName} 2>/dev/null || true
             docker run -d \\
               --name ${appName} \\

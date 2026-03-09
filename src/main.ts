@@ -191,6 +191,31 @@ export async function main() {
       process.exit(0)
     }
 
+    const hasHealthEndpoint = await p.confirm({
+      message: "Does your app have a health check endpoint?",
+      initialValue: true,
+    })
+    if (p.isCancel(hasHealthEndpoint)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
+    let healthEndpoint: string | undefined = "/health"
+    if (hasHealthEndpoint) {
+      const healthPath = await p.text({
+        message: "Health endpoint path",
+        placeholder: "/health",
+        initialValue: "/health",
+      })
+      if (p.isCancel(healthPath)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+      healthEndpoint = healthPath.trim() || "/health"
+    } else {
+      healthEndpoint = ""
+    }
+
     content = generateDockerBlueGreen({
       appName: appName.trim(),
       dockerNetwork: dockerNetwork.trim(),
@@ -202,6 +227,7 @@ export async function main() {
       vpsUser: (vpsUser as string)?.trim() || undefined,
       volumeMount: volumeMount?.trim() || undefined,
       infraServices: infraServices?.trim() || undefined,
+      healthEndpoint,
     })
     filename = "deploy"
     secrets = ["VPS_HOST", "VPS_SSH_KEY"]

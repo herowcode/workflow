@@ -103,11 +103,12 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("herowcode-api")
   })
 
-  it("health check uses docker exec on green container", () => {
+  it("health check uses container IP with curl (not docker exec)", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).toContain(
-      "docker exec herowcode-api-green curl -sf http://localhost:4000/health",
-    )
+    expect(yaml).toContain("CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' herowcode-api-green)")
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Shell script variable syntax
+    expect(yaml).toContain('curl -sf "http://${CONTAINER_IP}:4000/health"')
+    expect(yaml).not.toContain("docker exec")
   })
 
   it("includes health check loop", () => {
@@ -115,6 +116,33 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("HEALTHY=false")
     expect(yaml).toContain("sleep 5")
     expect(yaml).toContain("rolling back")
+  })
+
+  it("uses custom health endpoint when provided", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      healthEndpoint: "/api/health",
+    })
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Shell script variable syntax
+    expect(yaml).toContain('curl -sf "http://${CONTAINER_IP}:4000/api/health"')
+  })
+
+  it("uses container status check when healthEndpoint is empty string", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      healthEndpoint: "",
+    })
+    expect(yaml).toContain('docker ps --filter "name=herowcode-api-green" --filter "status=running"')
+    expect(yaml).toContain("Waiting for container... attempt")
+    expect(yaml).toContain("Container health check failed (container not running)")
+    expect(yaml).not.toContain("CONTAINER_IP")
+    expect(yaml).not.toContain("curl")
+  })
+
+  it("defaults to /health endpoint when healthEndpoint is not provided", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Shell script variable syntax
+    expect(yaml).toContain('curl -sf "http://${CONTAINER_IP}:4000/health"')
   })
 
   it("green container does not bind to host port", () => {
@@ -196,6 +224,7 @@ describe("generateDockerBlueGreen", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("docker image prune -f")
     expect(yaml).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
       "ghcr.io/${{ github.repository_owner }}/herowcode-api",
     )
     expect(yaml).toContain("xargs -r docker rmi")

@@ -114,7 +114,6 @@ ${infraCheckBlock}
               --name ${appName}-green \\
               --network ${dockerNetwork} \\
               --env-file ${envFilePath} \\
-              -p 127.0.0.1:${vpsPort}:${containerPort} \\
               --label app=${appName} \\
               --label environment=${environment} \\
               --label team=${team}${volumeFlag} \\
@@ -122,7 +121,7 @@ ${infraCheckBlock}
 
             HEALTHY=false
             for i in $(seq 1 20); do
-              if curl -sf http://localhost:${vpsPort}/health > /dev/null 2>&1; then
+              if docker exec ${appName}-green curl -sf http://localhost:${containerPort}/health > /dev/null 2>&1; then
                 HEALTHY=true
                 break
               fi
@@ -137,7 +136,19 @@ ${infraCheckBlock}
             fi
 
             docker rm -f ${appName} 2>/dev/null || true
-            docker rename ${appName}-green ${appName}
+            docker run -d \\
+              --name ${appName} \\
+              --network ${dockerNetwork} \\
+              --env-file ${envFilePath} \\
+              -p 127.0.0.1:${vpsPort}:${containerPort} \\
+              --label app=${appName} \\
+              --label environment=${environment} \\
+              --label team=${team}${volumeFlag} \\
+              $IMAGE
+
+            docker rm -f ${appName}-green
+            docker image prune -f
+            docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep ghcr.io/\${{ github.repository_owner }}/${appName} | grep -v $(docker inspect --format '{{.Image}}' ${appName} | cut -d: -f2 | head -c12) | awk '{print $2}' | xargs -r docker rmi || true
             docker logout ghcr.io
             echo "Deployment successful"
 `

@@ -103,9 +103,11 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("herowcode-api")
   })
 
-  it("health check uses vpsPort", () => {
+  it("health check uses docker exec on green container", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).toContain("http://localhost:8080/health")
+    expect(yaml).toContain(
+      "docker exec herowcode-api-green curl -sf http://localhost:4000/health",
+    )
   })
 
   it("includes health check loop", () => {
@@ -113,6 +115,25 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("HEALTHY=false")
     expect(yaml).toContain("sleep 5")
     expect(yaml).toContain("rolling back")
+  })
+
+  it("green container does not bind to host port", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    const greenRunIdx = yaml.indexOf("--name herowcode-api-green")
+    const portIdx = yaml.indexOf("-p 127.0.0.1:8080:4000")
+    // port binding must not appear before the final docker run (after green is removed)
+    expect(greenRunIdx).toBeGreaterThan(-1)
+    expect(portIdx).toBeGreaterThan(greenRunIdx)
+  })
+
+  it("final container uses app name with port binding", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    const portIdx = yaml.indexOf("-p 127.0.0.1:8080:4000")
+    const finalNameIdx = yaml.indexOf("--name herowcode-api \\")
+    expect(portIdx).toBeGreaterThan(-1)
+    expect(finalNameIdx).toBeGreaterThan(-1)
+    // final --name herowcode-api block should appear before the port line
+    expect(finalNameIdx).toBeLessThan(portIdx)
   })
 
   it("includes volume mount when provided", () => {
@@ -125,7 +146,8 @@ describe("generateDockerBlueGreen", () => {
 
   it("omits volume flag when not provided", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).not.toContain("-v ")
+    // checks for the volume mount indentation pattern inside docker run, not grep/awk flags
+    expect(yaml).not.toContain("              -v ")
   })
 
   it("includes infra service checks when provided", () => {
@@ -168,6 +190,15 @@ describe("generateDockerBlueGreen", () => {
     expect(loginIdx).toBeGreaterThan(-1)
     expect(pullIdx).toBeGreaterThan(-1)
     expect(loginIdx).toBeLessThan(pullIdx)
+  })
+
+  it("prunes dangling images and old app images after deploy", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("docker image prune -f")
+    expect(yaml).toContain(
+      "ghcr.io/${{ github.repository_owner }}/herowcode-api",
+    )
+    expect(yaml).toContain("xargs -r docker rmi")
   })
 
   it("logs out of GHCR after deployment", () => {

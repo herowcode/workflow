@@ -94,14 +94,26 @@ export async function main() {
     }
 
     const dockerNetwork = await p.text({
-      message: "Docker network name (e.g. herowcode)",
-      placeholder: "app-network",
-      validate: (v) => (v.trim() ? undefined : "Network name is required"),
+      message:
+        "Docker network(s), comma-separated (e.g. herowcode or herowcode,shared-services)",
+      placeholder: "app-network,shared-network",
+      validate: (v) =>
+        v
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean).length > 0
+          ? undefined
+          : "At least one network name is required",
     })
     if (p.isCancel(dockerNetwork)) {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
+
+    const dockerNetworks = dockerNetwork
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
 
     const containerPort = await p.text({
       message: "Container port — internal port the app listens on (e.g. 4000)",
@@ -218,7 +230,7 @@ export async function main() {
 
     content = generateDockerBlueGreen({
       appName: appName.trim(),
-      dockerNetwork: dockerNetwork.trim(),
+      dockerNetworks,
       containerPort: (containerPort as string).trim(),
       vpsPort: (vpsPort as string).trim(),
       envFilePath: envFilePath.trim(),

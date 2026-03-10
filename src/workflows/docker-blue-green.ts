@@ -3,7 +3,7 @@ export type TDockerEnvironment = "production" | "staging" | "development"
 
 export interface IDockerBlueGreenParams {
   appName: string
-  dockerNetwork: string
+  dockerNetworks: string[]
   containerPort: string
   vpsPort: string
   envFilePath: string
@@ -20,7 +20,7 @@ export function generateDockerBlueGreen(
 ): string {
   const {
     appName,
-    dockerNetwork,
+    dockerNetworks,
     containerPort,
     vpsPort,
     envFilePath,
@@ -31,6 +31,34 @@ export function generateDockerBlueGreen(
     infraServices,
     healthEndpoint = "/health",
   } = params
+
+  const normalizedNetworks = dockerNetworks
+    .map((network) => network.trim())
+    .filter(Boolean)
+
+  if (normalizedNetworks.length === 0) {
+    throw new Error("At least one Docker network is required")
+  }
+
+  const primaryNetwork = normalizedNetworks[0]
+  const additionalNetworks = normalizedNetworks.slice(1)
+  const networkEnsureBlock = normalizedNetworks
+    .map(
+      (network) =>
+        `            docker network inspect ${network} > /dev/null 2>&1 || docker network create ${network}`,
+    )
+    .join("\n")
+  const connectGreenNetworksBlock = additionalNetworks
+    .map(
+      (network) =>
+        `            docker network connect ${network} ${appName}-green`,
+    )
+    .join("\n")
+  const connectFinalNetworksBlock = additionalNetworks
+    .map(
+      (network) => `            docker network connect ${network} ${appName}`,
+    )
+    .join("\n")
 
   const volumeFlag = volumeMount ? `\n              -v ${volumeMount} \\` : ""
 
@@ -147,7 +175,7 @@ jobs:
           script: |
             IMAGE=$(echo "\${{ needs.build-and-push.outputs.image }}" | head -n1)
 ${infraCheckBlock}
-            docker network inspect ${dockerNetwork} > /dev/null 2>&1 || docker network create ${dockerNetwork}
+${networkEnsureBlock}
 
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u \${{ github.actor }} --password-stdin
 
@@ -155,23 +183,25 @@ ${infraCheckBlock}
 
             docker run -d \\
               --name ${appName}-green \\
-              --network ${dockerNetwork} \\
+              --network ${primaryNetwork} \\
               --env-file ${envFilePath} \\
               --label app=${appName} \\
               --label environment=${environment} \\
               --label team=${team}${volumeFlag} \\
               $IMAGE
+${connectGreenNetworksBlock ? `${connectGreenNetworksBlock}\n` : ""}
 ${healthCheckBlock}
             docker rm -f ${appName} 2>/dev/null || true
             docker run -d \\
               --name ${appName} \\
-              --network ${dockerNetwork} \\
+              --network ${primaryNetwork} \\
               --env-file ${envFilePath} \\
               -p 127.0.0.1:${vpsPort}:${containerPort} \\
               --label app=${appName} \\
               --label environment=${environment} \\
               --label team=${team}${volumeFlag} \\
               $IMAGE
+${connectFinalNetworksBlock ? `${connectFinalNetworksBlock}\n` : ""}
 
             docker rm -f ${appName}-green
             docker image prune -f

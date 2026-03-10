@@ -3,7 +3,7 @@ import { generateDockerBlueGreen } from "./docker-blue-green"
 
 const baseParams = {
   appName: "herowcode-api",
-  dockerNetwork: "herowcode",
+  dockerNetworks: ["herowcode"],
   containerPort: "4000",
   vpsPort: "8080",
   envFilePath: "~/whatsapp/.env",
@@ -263,5 +263,26 @@ describe("generateDockerBlueGreen", () => {
     const successIdx = yaml.indexOf("Deployment successful")
     expect(logoutIdx).toBeGreaterThan(-1)
     expect(logoutIdx).toBeLessThan(successIdx)
+  })
+
+  it("creates and connects multiple networks", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      dockerNetworks: ["herowcode", "shared-services"],
+    })
+
+    expect(yaml).toContain(
+      "docker network inspect herowcode > /dev/null 2>&1 || docker network create herowcode",
+    )
+    expect(yaml).toContain(
+      "docker network inspect shared-services > /dev/null 2>&1 || docker network create shared-services",
+    )
+    expect(yaml).toContain("--network herowcode")
+    expect(yaml).toContain(
+      "docker network connect shared-services herowcode-api-green",
+    )
+    expect(yaml).toContain(
+      "docker network connect shared-services herowcode-api",
+    )
   })
 })

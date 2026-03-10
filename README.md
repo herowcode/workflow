@@ -58,7 +58,7 @@ A zero-downtime deployment pipeline using a blue-green container swap on your VP
 3. SSHs into your VPS and:
    - Optionally verifies infrastructure services are running (Postgres, RabbitMQ, etc.)
    - Pulls the new image
-   - Starts a new `<app>-green` container on the configured network, port, and env file
+    - Starts a new `<app>-green` container on the configured network(s), port, and env file
    - Runs a health check loop (20 attempts × 5s)
    - If healthy: removes the old `<app>` and renames green → blue
    - If unhealthy: removes the green container and exits with failure (rollback)
@@ -68,7 +68,7 @@ A zero-downtime deployment pipeline using a blue-green container swap on your VP
 | Question | Example |
 |---|---|
 | App name | `herowcode-api` |
-| Docker network | `herowcode` |
+| Docker network(s), comma-separated | `herowcode` or `herowcode,shared-services` |
 | Container port | `4000` |
 | Env file path on VPS | `~/api/.env` |
 | Volume mount (optional) | `herowcode_api_data:/app/data` |

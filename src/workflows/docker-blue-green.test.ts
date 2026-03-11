@@ -121,7 +121,10 @@ describe("generateDockerBlueGreen", () => {
   it("health check uses container IP with curl (not docker exec)", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain(
-      "CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' herowcode-api-green)",
+      "CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{if .IPAddress}}{{.IPAddress}}",
+    )
+    expect(yaml).toContain(
+      `{{end}}{{end}}' herowcode-api-green | awk 'NF { print; exit }')`,
     )
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Shell script variable syntax
     expect(yaml).toContain('curl -sf "http://${CONTAINER_IP}:4000/health"')
@@ -324,6 +327,20 @@ describe("generateDockerBlueGreen", () => {
     )
     expect(yaml).toContain(
       "docker network connect shared-services herowcode-api",
+    )
+  })
+
+  it("uses only the first container IP in multi-network health checks", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      dockerNetworks: ["herowcode", "shared-services"],
+    })
+
+    expect(yaml).toContain(
+      "CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{if .IPAddress}}{{.IPAddress}}",
+    )
+    expect(yaml).toContain(
+      `{{end}}{{end}}' herowcode-api-green | awk 'NF { print; exit }')`,
     )
   })
 })

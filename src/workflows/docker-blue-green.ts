@@ -84,7 +84,7 @@ export function generateDockerBlueGreen(
     healthEndpoint && normalizedContainerPort
       ? `
             HEALTHY=false
-            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${appName}-green)
+            CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{if .IPAddress}}{{.IPAddress}}{{"\n"}}{{end}}{{end}}' ${appName}-green | awk 'NF { print; exit }')
             for i in $(seq 1 20); do
               if curl -sf "http://\${CONTAINER_IP}:${normalizedContainerPort}${healthEndpoint}" > /dev/null 2>&1; then
                 HEALTHY=true

@@ -37,7 +37,7 @@ describe("generateDockerBlueGreen", () => {
 
   it("includes GHCR login step with GITHUB_TOKEN", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).toContain("docker/login-action@v3")
+    expect(yaml).toContain("docker/login-action@v4")
     expect(yaml).toContain("registry: ghcr.io")
     // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
     expect(yaml).toContain("${{ secrets.GITHUB_TOKEN }}")
@@ -48,12 +48,12 @@ describe("generateDockerBlueGreen", () => {
   it("includes docker metadata with app name", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("herowcode-api")
-    expect(yaml).toContain("docker/metadata-action@v5")
+    expect(yaml).toContain("docker/metadata-action@v6")
   })
 
   it("includes build and push step", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    expect(yaml).toContain("docker/build-push-action@v5")
+    expect(yaml).toContain("docker/build-push-action@v7")
     expect(yaml).toContain("push: true")
   })
 

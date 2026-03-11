@@ -80,8 +80,9 @@ export function generateDockerBlueGreen(
 `
     : ""
 
-  const healthCheckBlock = healthEndpoint && normalizedContainerPort
-    ? `
+  const healthCheckBlock =
+    healthEndpoint && normalizedContainerPort
+      ? `
             HEALTHY=false
             CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${appName}-green)
             for i in $(seq 1 20); do
@@ -101,7 +102,7 @@ export function generateDockerBlueGreen(
               exit 1
             fi
 `
-    : `
+      : `
             HEALTHY=false
             for i in $(seq 1 20); do
               if docker ps --filter "name=${appName}-green" --filter "status=running" -q | grep -q .; then

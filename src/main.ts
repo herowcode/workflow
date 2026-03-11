@@ -129,7 +129,8 @@ export async function main() {
 
     if (exposesPort) {
       const selectedContainerPort = await p.text({
-        message: "Container port — internal port the app listens on (e.g. 4000)",
+        message:
+          "Container port — internal port the app listens on (e.g. 4000)",
         placeholder: "3000",
         validate: (v) =>
           /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",

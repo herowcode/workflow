@@ -4,8 +4,8 @@ export type TDockerEnvironment = "production" | "staging" | "development"
 export interface IDockerBlueGreenParams {
   appName: string
   dockerNetworks: string[]
-  containerPort: string
-  vpsPort: string
+  containerPort?: string
+  vpsPort?: string
   envFilePath: string
   team: TDockerTeam
   environment: TDockerEnvironment
@@ -42,6 +42,9 @@ export function generateDockerBlueGreen(
 
   const primaryNetwork = normalizedNetworks[0]
   const additionalNetworks = normalizedNetworks.slice(1)
+  const normalizedContainerPort = containerPort?.trim()
+  const normalizedVpsPort = vpsPort?.trim()
+  const hasPublishedPort = Boolean(normalizedContainerPort && normalizedVpsPort)
   const networkEnsureBlock = normalizedNetworks
     .map(
       (network) =>
@@ -61,6 +64,9 @@ export function generateDockerBlueGreen(
     .join("\n")
 
   const volumeFlag = volumeMount ? `\n              -v ${volumeMount} \\` : ""
+  const portPublishFlag = hasPublishedPort
+    ? `\n              -p 127.0.0.1:${normalizedVpsPort}:${normalizedContainerPort} \\`
+    : ""
 
   const infraCheckBlock = infraServices
     ? `
@@ -74,12 +80,12 @@ export function generateDockerBlueGreen(
 `
     : ""
 
-  const healthCheckBlock = healthEndpoint
+  const healthCheckBlock = healthEndpoint && normalizedContainerPort
     ? `
             HEALTHY=false
             CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${appName}-green)
             for i in $(seq 1 20); do
-              if curl -sf "http://\${CONTAINER_IP}:${containerPort}${healthEndpoint}" > /dev/null 2>&1; then
+              if curl -sf "http://\${CONTAINER_IP}:${normalizedContainerPort}${healthEndpoint}" > /dev/null 2>&1; then
                 HEALTHY=true
                 break
               fi
@@ -196,7 +202,7 @@ ${healthCheckBlock}
               --name ${appName} \\
               --network ${primaryNetwork} \\
               --env-file ${envFilePath} \\
-              -p 127.0.0.1:${vpsPort}:${containerPort} \\
+${portPublishFlag}
               --label app=${appName} \\
               --label environment=${environment} \\
               --label team=${team}${volumeFlag} \\

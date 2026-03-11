@@ -115,26 +115,43 @@ export async function main() {
       .map((name) => name.trim())
       .filter(Boolean)
 
-    const containerPort = await p.text({
-      message: "Container port — internal port the app listens on (e.g. 4000)",
-      placeholder: "3000",
-      validate: (v) =>
-        /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
+    const exposesPort = await p.confirm({
+      message: "Does this app expose a port?",
+      initialValue: true,
     })
-    if (p.isCancel(containerPort)) {
+    if (p.isCancel(exposesPort)) {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
 
-    const vpsPort = await p.text({
-      message: "VPS port — port exposed on 127.0.0.1 of the VPS (e.g. 8080)",
-      placeholder: containerPort as string,
-      validate: (v) =>
-        /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
-    })
-    if (p.isCancel(vpsPort)) {
-      p.cancel("Operation cancelled.")
-      process.exit(0)
+    let containerPort: string | undefined
+    let vpsPort: string | undefined
+
+    if (exposesPort) {
+      const selectedContainerPort = await p.text({
+        message: "Container port — internal port the app listens on (e.g. 4000)",
+        placeholder: "3000",
+        validate: (v) =>
+          /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
+      })
+      if (p.isCancel(selectedContainerPort)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+
+      const selectedVpsPort = await p.text({
+        message: "VPS port — port exposed on 127.0.0.1 of the VPS (e.g. 8080)",
+        placeholder: selectedContainerPort as string,
+        validate: (v) =>
+          /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
+      })
+      if (p.isCancel(selectedVpsPort)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+
+      containerPort = (selectedContainerPort as string).trim()
+      vpsPort = (selectedVpsPort as string).trim()
     }
 
     const envFilePath = await p.text({
@@ -203,27 +220,31 @@ export async function main() {
       process.exit(0)
     }
 
-    const hasHealthEndpoint = await p.confirm({
-      message: "Does your app have a health check endpoint?",
-      initialValue: true,
-    })
-    if (p.isCancel(hasHealthEndpoint)) {
-      p.cancel("Operation cancelled.")
-      process.exit(0)
-    }
-
     let healthEndpoint: string | undefined = "/health"
-    if (hasHealthEndpoint) {
-      const healthPath = await p.text({
-        message: "Health endpoint path",
-        placeholder: "/health",
-        initialValue: "/health",
+    if (exposesPort) {
+      const hasHealthEndpoint = await p.confirm({
+        message: "Does your app have a health check endpoint?",
+        initialValue: true,
       })
-      if (p.isCancel(healthPath)) {
+      if (p.isCancel(hasHealthEndpoint)) {
         p.cancel("Operation cancelled.")
         process.exit(0)
       }
-      healthEndpoint = healthPath.trim() || "/health"
+
+      if (hasHealthEndpoint) {
+        const healthPath = await p.text({
+          message: "Health endpoint path",
+          placeholder: "/health",
+          initialValue: "/health",
+        })
+        if (p.isCancel(healthPath)) {
+          p.cancel("Operation cancelled.")
+          process.exit(0)
+        }
+        healthEndpoint = healthPath.trim() || "/health"
+      } else {
+        healthEndpoint = ""
+      }
     } else {
       healthEndpoint = ""
     }
@@ -231,8 +252,8 @@ export async function main() {
     content = generateDockerBlueGreen({
       appName: appName.trim(),
       dockerNetworks,
-      containerPort: (containerPort as string).trim(),
-      vpsPort: (vpsPort as string).trim(),
+      containerPort,
+      vpsPort,
       envFilePath: envFilePath.trim(),
       team: team as "FRONT" | "BACK" | "API" | "BOT" | "OTHER",
       environment: environment as "production" | "staging" | "development",

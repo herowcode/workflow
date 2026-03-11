@@ -191,6 +191,32 @@ describe("generateDockerBlueGreen", () => {
     expect(finalNameIdx).toBeLessThan(portIdx)
   })
 
+  it("omits host port binding when app does not expose ports", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      containerPort: undefined,
+      vpsPort: undefined,
+      healthEndpoint: "",
+    })
+
+    expect(yaml).not.toContain("-p 127.0.0.1:")
+  })
+
+  it("falls back to status health check when container port is missing", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      containerPort: undefined,
+      vpsPort: undefined,
+    })
+
+    expect(yaml).toContain(
+      'docker ps --filter "name=herowcode-api-green" --filter "status=running"',
+    )
+    expect(yaml).toContain("Waiting for container... attempt")
+    expect(yaml).not.toContain("CONTAINER_IP")
+    expect(yaml).not.toContain("curl -sf")
+  })
+
   it("includes volume mount when provided", () => {
     const yaml = generateDockerBlueGreen({
       ...baseParams,

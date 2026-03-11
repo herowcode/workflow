@@ -42,6 +42,14 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("actions: write")
   })
 
+  it("sets up buildx before build step", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    const buildxIdx = yaml.indexOf("docker/setup-buildx-action@v3")
+    const buildPushIdx = yaml.indexOf("docker/build-push-action@v7")
+    expect(buildxIdx).toBeGreaterThan(-1)
+    expect(buildxIdx).toBeLessThan(buildPushIdx)
+  })
+
   it("includes GHCR login step with GITHUB_TOKEN", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("docker/login-action@v4")

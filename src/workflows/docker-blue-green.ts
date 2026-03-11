@@ -143,6 +143,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4.3.1
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:

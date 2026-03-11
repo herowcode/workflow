@@ -27,6 +27,14 @@ function buildOnBlock(trigger: TTrigger): string {
   pull_request:`
 }
 
+function pnpmSetupStep(packageManager: TPackageManager): string {
+  if (packageManager !== "pnpm") return ""
+  return `
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+`
+}
+
 export function generateCiTest(params: ICiTestParams): string {
   const { nodeVersion, trigger, packageManager } = params
   const installCmd = getInstallCommand(packageManager)
@@ -41,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+${pnpmSetupStep(packageManager)}
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

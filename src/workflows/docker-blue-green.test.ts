@@ -35,6 +35,13 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("packages: write")
   })
 
+  it("includes Docker layer caching with GHA backend", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).toContain("cache-from: type=gha")
+    expect(yaml).toContain("cache-to: type=gha,mode=max")
+    expect(yaml).toContain("actions: write")
+  })
+
   it("includes GHCR login step with GITHUB_TOKEN", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain("docker/login-action@v4")

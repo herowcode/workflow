@@ -133,6 +133,7 @@ on:
 permissions:
   contents: read
   packages: write
+  actions: write
 
 jobs:
   build-and-push:
@@ -165,6 +166,8 @@ jobs:
           push: true
           tags: \${{ steps.meta.outputs.tags }}
           labels: \${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     runs-on: ubuntu-latest

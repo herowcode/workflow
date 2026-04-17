@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process"
 import * as p from "@clack/prompts"
 import pc from "picocolors"
-import { detectPackageManager } from "./detect"
+import { detectCacheMounts, detectPackageManager } from "./detect"
 import { generateCiTest } from "./workflows/ci-test"
 import { generateDockerBlueGreen } from "./workflows/docker-blue-green"
 import { generateNpmRelease } from "./workflows/npm-release"
@@ -262,6 +262,7 @@ export async function main() {
       volumeMount: volumeMount?.trim() || undefined,
       infraServices: infraServices?.trim() || undefined,
       healthEndpoint,
+      cacheMounts: detectCacheMounts(),
     })
     filename = "deploy"
     secrets = ["VPS_HOST", "VPS_SSH_KEY"]

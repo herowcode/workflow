@@ -330,6 +330,60 @@ describe("generateDockerBlueGreen", () => {
     )
   })
 
+  it("omits buildkit-cache-dance steps when no cacheMounts are provided", () => {
+    const yaml = generateDockerBlueGreen(baseParams)
+    expect(yaml).not.toContain("buildkit-cache-dance")
+    expect(yaml).not.toContain("actions/cache@v4")
+  })
+
+  it("injects buildkit-cache-dance for a single node cache mount", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      cacheMounts: [
+        { id: "npm-cache", path: "/root/.npm", lockfile: "package-lock.json" },
+      ],
+    })
+    expect(yaml).toContain("actions/cache@v4")
+    expect(yaml).toContain("reproducible-containers/buildkit-cache-dance@v3")
+    expect(yaml).toContain('"npm-cache": "/root/.npm"')
+    expect(yaml).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GHA expression syntax
+      "key: npm-cache-${{ hashFiles('package-lock.json') }}",
+    )
+    expect(yaml).toContain(
+      "RUN --mount=type=cache,target=/root/.npm <install command>",
+    )
+    const injectIdx = yaml.indexOf("buildkit-cache-dance")
+    const buildIdx = yaml.indexOf("docker/build-push-action@v7")
+    expect(injectIdx).toBeGreaterThan(-1)
+    expect(injectIdx).toBeLessThan(buildIdx)
+  })
+
+  it("emits one step per cache mount for polyglot projects", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      cacheMounts: [
+        {
+          id: "pnpm-store",
+          path: "/root/.local/share/pnpm/store",
+          lockfile: "pnpm-lock.yaml",
+        },
+        {
+          id: "pip-cache",
+          path: "/root/.cache/pip",
+          lockfile: "requirements.txt",
+        },
+      ],
+    })
+    expect(yaml).toContain('"pnpm-store": "/root/.local/share/pnpm/store"')
+    expect(yaml).toContain('"pip-cache": "/root/.cache/pip"')
+    const cacheSteps = yaml.match(/uses: actions\/cache@v4/g) ?? []
+    expect(cacheSteps).toHaveLength(2)
+    const danceSteps =
+      yaml.match(/reproducible-containers\/buildkit-cache-dance@v3/g) ?? []
+    expect(danceSteps).toHaveLength(2)
+  })
+
   it("uses only the first container IP in multi-network health checks", () => {
     const yaml = generateDockerBlueGreen({
       ...baseParams,

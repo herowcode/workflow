@@ -1,3 +1,5 @@
+import type { ICacheMount } from "../detect"
+
 export type TDockerTeam = "FRONT" | "BACK" | "API" | "BOT" | "OTHER"
 export type TDockerEnvironment = "production" | "staging" | "development"
 
@@ -13,6 +15,7 @@ export interface IDockerBlueGreenParams {
   volumeMount?: string
   infraServices?: string
   healthEndpoint?: string
+  cacheMounts?: ICacheMount[]
 }
 
 export function generateDockerBlueGreen(
@@ -30,6 +33,7 @@ export function generateDockerBlueGreen(
     volumeMount,
     infraServices,
     healthEndpoint = "/health",
+    cacheMounts = [],
   } = params
 
   const normalizedNetworks = dockerNetworks
@@ -62,6 +66,42 @@ export function generateDockerBlueGreen(
       (network) => `            docker network connect ${network} ${appName}`,
     )
     .join("\n")
+
+  const cacheMountSteps = cacheMounts
+    .map(
+      (mount) => `      - name: Cache ${mount.id}
+        id: cache-${mount.id}
+        uses: actions/cache@v4
+        with:
+          path: ${mount.id}
+          key: ${mount.id}-\${{ hashFiles('${mount.lockfile}') }}
+          restore-keys: |
+            ${mount.id}-
+
+      - name: Inject ${mount.id} into buildx
+        uses: reproducible-containers/buildkit-cache-dance@v3.1.2
+        with:
+          cache-map: |
+            {
+              "${mount.id}": "${mount.path}"
+            }
+          skip-extraction: \${{ steps.cache-${mount.id}.outputs.cache-hit }}
+`,
+    )
+    .join("\n")
+  const cacheMountsBlock = cacheMountSteps ? `\n${cacheMountSteps}` : ""
+  const cacheMountsComment =
+    cacheMounts.length > 0
+      ? `      # Deps caches persisted across runs via buildkit-cache-dance.
+      # For this to speed up builds, your Dockerfile must use BuildKit cache mounts, e.g.:
+${cacheMounts
+  .map(
+    (mount) =>
+      `      #   RUN --mount=type=cache,target=${mount.path} <install command>`,
+  )
+  .join("\n")}
+`
+      : ""
 
   const volumeFlag = volumeMount ? `\n              -v ${volumeMount} \\` : ""
   const portPublishFlag = hasPublishedPort
@@ -161,8 +201,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=sha
-
-      - name: Build and push
+${cacheMountsBlock}
+${cacheMountsComment}      - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .

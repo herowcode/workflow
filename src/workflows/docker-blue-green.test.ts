@@ -44,7 +44,7 @@ describe("generateDockerBlueGreen", () => {
 
   it("sets up buildx before build step", () => {
     const yaml = generateDockerBlueGreen(baseParams)
-    const buildxIdx = yaml.indexOf("docker/setup-buildx-action@v3")
+    const buildxIdx = yaml.indexOf("docker/setup-buildx-action@v4")
     const buildPushIdx = yaml.indexOf("docker/build-push-action@v7")
     expect(buildxIdx).toBeGreaterThan(-1)
     expect(buildxIdx).toBeLessThan(buildPushIdx)

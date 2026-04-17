@@ -81,8 +81,8 @@ describe("generateCiTest", () => {
 
   it("includes pnpm setup step before node setup when package manager is pnpm", () => {
     const yaml = generateCiTest({ ...baseParams, packageManager: "pnpm" })
-    const pnpmSetupIdx = yaml.indexOf("pnpm/action-setup@v4")
-    const nodeSetupIdx = yaml.indexOf("actions/setup-node@v4")
+    const pnpmSetupIdx = yaml.indexOf("pnpm/action-setup@v5")
+    const nodeSetupIdx = yaml.indexOf("actions/setup-node@v6")
     expect(pnpmSetupIdx).toBeGreaterThan(-1)
     expect(pnpmSetupIdx).toBeLessThan(nodeSetupIdx)
   })

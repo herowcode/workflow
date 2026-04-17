@@ -141,10 +141,10 @@ jobs:
     outputs:
       image: \${{ steps.meta.outputs.tags }}
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -207,6 +207,7 @@ ${healthCheckBlock}
             docker rm -f ${appName} 2>/dev/null || true
             docker run -d \\
               --name ${appName} \\
+              --restart unless-stopped \\
               --network ${primaryNetwork} \\
               --env-file ${envFilePath} \\
 ${portPublishFlag}

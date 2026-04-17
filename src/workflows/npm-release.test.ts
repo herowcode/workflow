@@ -45,7 +45,7 @@ describe("generateNpmRelease — npmjs (OIDC)", () => {
 
   it("includes pnpm setup step", () => {
     const yaml = generateNpmRelease(baseNpmjs)
-    expect(yaml).toContain("pnpm/action-setup@v4")
+    expect(yaml).toContain("pnpm/action-setup@v5")
   })
 
   it("omits pnpm setup step for npm package manager", () => {
@@ -120,6 +120,6 @@ describe("generateNpmRelease — GitHub Packages (token)", () => {
 
   it("includes pnpm setup step", () => {
     const yaml = generateNpmRelease(baseGithub)
-    expect(yaml).toContain("pnpm/action-setup@v4")
+    expect(yaml).toContain("pnpm/action-setup@v5")
   })
 })

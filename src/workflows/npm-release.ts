@@ -25,7 +25,7 @@ function pnpmSetupStep(packageManager: TPackageManager): string {
   if (packageManager !== "pnpm") return ""
   return `
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 `
 }
 
@@ -49,10 +49,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${pnpmSetupStep(packageManager)}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: '${cacheKey}'
@@ -86,10 +86,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 ${pnpmSetupStep(packageManager)}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: '${cacheKey}'

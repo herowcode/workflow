@@ -3,7 +3,11 @@ import * as p from "@clack/prompts"
 import pc from "picocolors"
 import { detectCacheMounts, detectPackageManager } from "./detect"
 import { generateCiTest } from "./workflows/ci-test"
-import { generateDockerBlueGreen } from "./workflows/docker-blue-green"
+import {
+  generateDockerBlueGreen,
+  getAppTypePresets,
+  type TAppType,
+} from "./workflows/docker-blue-green"
 import { generateNpmRelease } from "./workflows/npm-release"
 import { writeWorkflow } from "./write"
 
@@ -115,8 +119,34 @@ export async function main() {
       .map((name) => name.trim())
       .filter(Boolean)
 
+    const useTraefik = await p.confirm({
+      message: "Expose this app via Traefik (reverse proxy)?",
+      initialValue: true,
+    })
+    if (p.isCancel(useTraefik)) {
+      p.cancel("Operation cancelled.")
+      process.exit(0)
+    }
+
+    let traefikDomain: string | undefined
+    if (useTraefik) {
+      const selectedDomain = await p.text({
+        message: "Public domain for this app (e.g. api.example.com)",
+        placeholder: "app.example.com",
+        validate: (v) =>
+          v.trim().includes(".") ? undefined : "Domain must contain a dot",
+      })
+      if (p.isCancel(selectedDomain)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+      traefikDomain = selectedDomain.trim()
+    }
+
     const exposesPort = await p.confirm({
-      message: "Does this app expose a port?",
+      message: useTraefik
+        ? "Does this app listen on a container port? (Traefik routes to it)"
+        : "Does this app expose a port?",
       initialValue: true,
     })
     if (p.isCancel(exposesPort)) {
@@ -140,19 +170,34 @@ export async function main() {
         process.exit(0)
       }
 
-      const selectedVpsPort = await p.text({
-        message: "VPS port — port exposed on 127.0.0.1 of the VPS (e.g. 8080)",
-        placeholder: selectedContainerPort as string,
-        validate: (v) =>
-          /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
-      })
-      if (p.isCancel(selectedVpsPort)) {
+      containerPort = (selectedContainerPort as string).trim()
+
+      const publishOnHost = useTraefik
+        ? await p.confirm({
+            message:
+              "Also publish on 127.0.0.1 of the VPS? (only useful for local debug)",
+            initialValue: false,
+          })
+        : true
+      if (p.isCancel(publishOnHost)) {
         p.cancel("Operation cancelled.")
         process.exit(0)
       }
 
-      containerPort = (selectedContainerPort as string).trim()
-      vpsPort = (selectedVpsPort as string).trim()
+      if (publishOnHost) {
+        const selectedVpsPort = await p.text({
+          message:
+            "VPS port — port exposed on 127.0.0.1 of the VPS (e.g. 8080)",
+          placeholder: containerPort,
+          validate: (v) =>
+            /^\d+$/.test(v.trim()) ? undefined : "Port must be a number",
+        })
+        if (p.isCancel(selectedVpsPort)) {
+          p.cancel("Operation cancelled.")
+          process.exit(0)
+        }
+        vpsPort = (selectedVpsPort as string).trim()
+      }
     }
 
     const envFilePath = await p.text({
@@ -250,6 +295,103 @@ export async function main() {
       healthEndpoint = ""
     }
 
+    let appType: TAppType = "other"
+    let traefikMiddlewares: string[] | undefined
+    if (useTraefik) {
+      const selectedAppType = await p.select({
+        message: "Application type (sets cache + middleware presets)",
+        options: [
+          {
+            value: "spa",
+            label: "SPA (React / Vue / Angular)",
+            hint: "hash-immutable assets + no-store HTML",
+          },
+          {
+            value: "nextjs",
+            label: "Next.js / Nuxt",
+            hint: "/_next/static immutable, /_next/image cached",
+          },
+          {
+            value: "node-api",
+            label: "Node API",
+            hint: "no-store + ratelimit",
+          },
+          {
+            value: "python",
+            label: "Python (Django / Flask)",
+            hint: "/static + /media presets",
+          },
+          {
+            value: "static",
+            label: "Static site",
+            hint: "7d default + immutable hashed assets",
+          },
+          {
+            value: "other",
+            label: "Other / custom",
+            hint: "no presets, pick middlewares manually",
+          },
+        ],
+      })
+      if (p.isCancel(selectedAppType)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+      appType = selectedAppType as TAppType
+
+      const presets = getAppTypePresets(appType)
+      const presetsHint =
+        presets.rootMiddlewares.length > 0
+          ? presets.rootMiddlewares.join(", ")
+          : "(none)"
+
+      const customize = await p.confirm({
+        message: `Customize root-router middlewares? Defaults: ${presetsHint}`,
+        initialValue: appType === "other",
+      })
+      if (p.isCancel(customize)) {
+        p.cancel("Operation cancelled.")
+        process.exit(0)
+      }
+
+      if (customize) {
+        const selectedMiddlewares = await p.multiselect({
+          message:
+            "Root-router middlewares (Space to toggle, Enter to confirm)",
+          options: [
+            { value: "compress", label: "compress" },
+            { value: "sec-headers", label: "sec-headers" },
+            {
+              value: "api-ratelimit",
+              label: "api-ratelimit (20 r/s burst 50)",
+            },
+            { value: "body-150m", label: "body-150m (150MB body limit)" },
+            {
+              value: "cc-immutable",
+              label: "cc-immutable (1y immutable assets)",
+            },
+            { value: "cc-no-store", label: "cc-no-store (HTML SPA shell)" },
+            { value: "cc-media", label: "cc-media (30d images)" },
+            { value: "cc-public", label: "cc-public (7d generic statics)" },
+            {
+              value: "cc-next-image",
+              label: "cc-next-image (Next.js /_next/image)",
+            },
+          ],
+          initialValues:
+            presets.rootMiddlewares.length > 0
+              ? presets.rootMiddlewares
+              : ["compress", "sec-headers"],
+          required: false,
+        })
+        if (p.isCancel(selectedMiddlewares)) {
+          p.cancel("Operation cancelled.")
+          process.exit(0)
+        }
+        traefikMiddlewares = selectedMiddlewares as string[]
+      }
+    }
+
     content = generateDockerBlueGreen({
       appName: appName.trim(),
       dockerNetworks,
@@ -263,6 +405,10 @@ export async function main() {
       infraServices: infraServices?.trim() || undefined,
       healthEndpoint,
       cacheMounts: detectCacheMounts(),
+      useTraefik,
+      traefikDomain,
+      traefikMiddlewares,
+      appType,
     })
     filename = "deploy"
     secrets = ["VPS_HOST", "VPS_SSH_KEY"]

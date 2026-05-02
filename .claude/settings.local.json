@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm test:run)",
+      "Bash(pnpm lint *)"
+    ]
+  }
+}

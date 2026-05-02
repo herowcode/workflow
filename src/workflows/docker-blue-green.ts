@@ -2,6 +2,13 @@ import type { ICacheMount } from "../detect"
 
 export type TDockerTeam = "FRONT" | "BACK" | "API" | "BOT" | "OTHER"
 export type TDockerEnvironment = "production" | "staging" | "development"
+export type TAppType =
+  | "spa"
+  | "nextjs"
+  | "node-api"
+  | "python"
+  | "static"
+  | "other"
 
 export interface IDockerBlueGreenParams {
   appName: string
@@ -16,6 +23,114 @@ export interface IDockerBlueGreenParams {
   infraServices?: string
   healthEndpoint?: string
   cacheMounts?: ICacheMount[]
+  useTraefik?: boolean
+  traefikDomain?: string
+  traefikEntrypoint?: string
+  traefikCertResolver?: string
+  traefikMiddlewares?: string[]
+  appType?: TAppType
+}
+
+interface ITraefikExtraRouter {
+  suffix: string
+  pathRule: string
+  middlewares: string[]
+}
+
+interface IAppTypePresets {
+  rootMiddlewares: string[]
+  extraRouters: ITraefikExtraRouter[]
+}
+
+const HASHED_ASSETS_REGEX = "\\\\.(js|css|woff2?|map)\\$"
+const MEDIA_REGEX = "\\\\.(png|jpe?g|gif|svg|webp|avif|ico|mp4|webm|mp3)\\$"
+
+export function getAppTypePresets(type: TAppType): IAppTypePresets {
+  if (type === "spa") {
+    return {
+      rootMiddlewares: ["compress", "sec-headers", "cc-no-store"],
+      extraRouters: [
+        {
+          suffix: "assets",
+          pathRule: `PathRegexp(\`${HASHED_ASSETS_REGEX}\`)`,
+          middlewares: ["compress", "sec-headers", "cc-immutable"],
+        },
+        {
+          suffix: "media",
+          pathRule: `PathRegexp(\`${MEDIA_REGEX}\`)`,
+          middlewares: ["compress", "sec-headers", "cc-media"],
+        },
+      ],
+    }
+  }
+  if (type === "nextjs") {
+    return {
+      rootMiddlewares: ["compress", "sec-headers"],
+      extraRouters: [
+        {
+          suffix: "next-static",
+          pathRule: "PathPrefix(`/_next/static`)",
+          middlewares: ["compress", "sec-headers", "cc-immutable"],
+        },
+        {
+          suffix: "next-image",
+          pathRule: "PathPrefix(`/_next/image`)",
+          middlewares: ["compress", "sec-headers", "cc-next-image"],
+        },
+        {
+          suffix: "media",
+          pathRule: `PathRegexp(\`${MEDIA_REGEX}\`)`,
+          middlewares: ["compress", "sec-headers", "cc-media"],
+        },
+      ],
+    }
+  }
+  if (type === "node-api") {
+    return {
+      rootMiddlewares: [
+        "compress",
+        "sec-headers",
+        "api-ratelimit",
+        "cc-no-store",
+      ],
+      extraRouters: [],
+    }
+  }
+  if (type === "python") {
+    return {
+      rootMiddlewares: ["compress", "sec-headers", "body-150m"],
+      extraRouters: [
+        {
+          suffix: "static",
+          pathRule: "PathPrefix(`/static`)",
+          middlewares: ["compress", "sec-headers", "cc-media"],
+        },
+        {
+          suffix: "media",
+          pathRule: "PathPrefix(`/media`)",
+          middlewares: ["compress", "sec-headers", "cc-public"],
+        },
+      ],
+    }
+  }
+  if (type === "static") {
+    return {
+      rootMiddlewares: ["compress", "sec-headers", "cc-public"],
+      extraRouters: [
+        {
+          suffix: "assets",
+          pathRule: `PathRegexp(\`${HASHED_ASSETS_REGEX}\`)`,
+          middlewares: ["compress", "sec-headers", "cc-immutable"],
+        },
+        {
+          suffix: "media",
+          pathRule: `PathRegexp(\`${MEDIA_REGEX}\`)`,
+          middlewares: ["compress", "sec-headers", "cc-media"],
+        },
+      ],
+    }
+  }
+  return { rootMiddlewares: [], extraRouters: [] }
 }
 
 export function generateDockerBlueGreen(
@@ -34,7 +149,17 @@ export function generateDockerBlueGreen(
     infraServices,
     healthEndpoint = "/health",
     cacheMounts = [],
+    useTraefik = false,
+    traefikDomain,
+    traefikEntrypoint = "websecure",
+    traefikCertResolver = "le",
+    traefikMiddlewares,
+    appType = "other",
   } = params
+
+  const presets = getAppTypePresets(appType)
+  const rootMiddlewares = traefikMiddlewares ?? presets.rootMiddlewares
+  const extraRouters = presets.extraRouters
 
   const normalizedNetworks = dockerNetworks
     .map((network) => network.trim())
@@ -42,6 +167,10 @@ export function generateDockerBlueGreen(
 
   if (normalizedNetworks.length === 0) {
     throw new Error("At least one Docker network is required")
+  }
+
+  if (useTraefik && !traefikDomain?.trim()) {
+    throw new Error("traefikDomain is required when useTraefik is true")
   }
 
   const primaryNetwork = normalizedNetworks[0]
@@ -103,17 +232,134 @@ ${cacheMounts
 `
       : ""
 
-  const volumeFlag = volumeMount ? `\n              -v ${volumeMount} \\` : ""
-  const portPublishFlag = hasPublishedPort
-    ? `\n              -p 127.0.0.1:${normalizedVpsPort}:${normalizedContainerPort} \\`
-    : ""
+  const indent = "            "
+  const joinDockerRunLines = (lines: string[]): string =>
+    lines
+      .map((line, i) => `${line}${i < lines.length - 1 ? " \\" : ""}`)
+      .join("\n")
+
+  const greenRunLines = [
+    `${indent}docker run -d`,
+    `${indent}  --name ${appName}-green`,
+    `${indent}  --network ${primaryNetwork}`,
+    `${indent}  --env-file ${envFilePath}`,
+    `${indent}  --label app=${appName}`,
+    `${indent}  --label environment=${environment}`,
+    `${indent}  --label team=${team}`,
+    ...(volumeMount ? [`${indent}  -v ${volumeMount}`] : []),
+    `${indent}  $IMAGE`,
+  ]
+  const greenRunBlock = joinDockerRunLines(greenRunLines)
+
+  const dockerHealthLines =
+    healthEndpoint && normalizedContainerPort
+      ? [
+          `${indent}  --health-cmd "curl -sf http://127.0.0.1:${normalizedContainerPort}${healthEndpoint} || exit 1"`,
+          `${indent}  --health-interval=30s`,
+          `${indent}  --health-timeout=5s`,
+          `${indent}  --health-start-period=20s`,
+          `${indent}  --health-retries=3`,
+        ]
+      : []
+
+  const escapeForLabel = (rule: string): string => rule.replace(/`/g, "\\`")
+  const buildRouterLines = (
+    routerName: string,
+    rule: string,
+    middlewares: string[],
+    declareService: boolean,
+  ): string[] => [
+    `${indent}  --label "traefik.http.routers.${routerName}.rule=${escapeForLabel(rule)}"`,
+    `${indent}  --label traefik.http.routers.${routerName}.entrypoints=${traefikEntrypoint}`,
+    `${indent}  --label traefik.http.routers.${routerName}.tls=true`,
+    `${indent}  --label traefik.http.routers.${routerName}.tls.certresolver=${traefikCertResolver}`,
+    ...(declareService
+      ? [
+          `${indent}  --label traefik.http.routers.${routerName}.service=${appName}`,
+        ]
+      : []),
+    ...(middlewares.length > 0
+      ? [
+          `${indent}  --label traefik.http.routers.${routerName}.middlewares=${middlewares.join(",")}`,
+        ]
+      : []),
+  ]
+
+  const hostRule = `Host(\`${traefikDomain?.trim()}\`)`
+  const traefikLabelLines = useTraefik
+    ? [
+        `${indent}  --label traefik.enable=true`,
+        `${indent}  --label "traefik.docker.network=${primaryNetwork}"`,
+        ...(normalizedContainerPort
+          ? [
+              `${indent}  --label traefik.http.services.${appName}.loadbalancer.server.port=${normalizedContainerPort}`,
+            ]
+          : []),
+        ...buildRouterLines(appName, hostRule, rootMiddlewares, false),
+        ...extraRouters.flatMap((router) =>
+          buildRouterLines(
+            `${appName}-${router.suffix}`,
+            `${hostRule} && ${router.pathRule}`,
+            router.middlewares,
+            true,
+          ),
+        ),
+      ]
+    : []
+
+  const finalRunLines = [
+    `${indent}docker run -d`,
+    `${indent}  --name ${appName}`,
+    `${indent}  --restart unless-stopped`,
+    `${indent}  --network ${primaryNetwork}`,
+    `${indent}  --env-file ${envFilePath}`,
+    ...(hasPublishedPort
+      ? [
+          `${indent}  -p 127.0.0.1:${normalizedVpsPort}:${normalizedContainerPort}`,
+        ]
+      : []),
+    ...dockerHealthLines,
+    `${indent}  --label app=${appName}`,
+    `${indent}  --label environment=${environment}`,
+    `${indent}  --label team=${team}`,
+    ...traefikLabelLines,
+    ...(volumeMount ? [`${indent}  -v ${volumeMount}`] : []),
+    `${indent}  $IMAGE`,
+  ]
+  const finalRunBlock = joinDockerRunLines(finalRunLines)
+
+  const dockerHealthComment =
+    dockerHealthLines.length > 0
+      ? `\n            # Docker health check requires \`curl\` in the image. If your base
+            # image does not include it, add: RUN apt-get update && apt-get install -y curl
+            # (or the equivalent for alpine/distroless). Without it, --health-cmd fails
+            # and the daemon will keep restarting the container.`
+      : ""
 
   const infraCheckBlock = infraServices
     ? `
-            # Check infrastructure services
+            # Wait for infrastructure services to be healthy (or running, when no
+            # healthcheck is defined). Aborts the deploy if a dep is missing or
+            # never becomes ready.
             for service in ${infraServices}; do
-              if ! docker ps --filter "name=$service" --filter "status=running" -q | grep -q .; then
-                echo "Service $service is not running, aborting deploy"
+              ready=false
+              for i in $(seq 1 30); do
+                state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$service" 2>/dev/null || echo missing)
+                case "$state" in
+                  healthy|running)
+                    ready=true
+                    break
+                    ;;
+                  missing)
+                    echo "Service $service not found, aborting deploy"
+                    exit 1
+                    ;;
+                esac
+                echo "Waiting for $service ($state)... attempt $i/30"
+                sleep 5
+              done
+              if [ "$ready" = "false" ]; then
+                echo "Service $service never became ready, aborting deploy"
                 exit 1
               fi
             done
@@ -234,27 +480,11 @@ ${networkEnsureBlock}
 
             docker pull $IMAGE
 
-            docker run -d \\
-              --name ${appName}-green \\
-              --network ${primaryNetwork} \\
-              --env-file ${envFilePath} \\
-              --label app=${appName} \\
-              --label environment=${environment} \\
-              --label team=${team}${volumeFlag} \\
-              $IMAGE
+${greenRunBlock}
 ${connectGreenNetworksBlock ? `${connectGreenNetworksBlock}\n` : ""}
 ${healthCheckBlock}
-            docker rm -f ${appName} 2>/dev/null || true
-            docker run -d \\
-              --name ${appName} \\
-              --restart unless-stopped \\
-              --network ${primaryNetwork} \\
-              --env-file ${envFilePath} \\
-${portPublishFlag}
-              --label app=${appName} \\
-              --label environment=${environment} \\
-              --label team=${team}${volumeFlag} \\
-              $IMAGE
+            docker rm -f ${appName} 2>/dev/null || true${dockerHealthComment}
+${finalRunBlock}
 ${connectFinalNetworksBlock ? `${connectFinalNetworksBlock}\n` : ""}
 
             docker rm -f ${appName}-green

@@ -208,8 +208,7 @@ export async function main() {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
-    const normalizedEnvFilePath =
-      (envFilePath as string).trim() || undefined
+    const normalizedEnvFilePath = (envFilePath as string).trim() || undefined
 
     const vpsUser = await p.text({
       message: "VPS SSH username (e.g. ubuntu, deploy)",

@@ -88,6 +88,14 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("--env-file ~/whatsapp/.env")
   })
 
+  it("omits --env-file flag when envFilePath is not provided", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      envFilePath: undefined,
+    })
+    expect(yaml).not.toContain("--env-file")
+  })
+
   it("creates network if it does not exist", () => {
     const yaml = generateDockerBlueGreen(baseParams)
     expect(yaml).toContain(
@@ -416,7 +424,7 @@ describe("generateDockerBlueGreen", () => {
       "--label traefik.http.services.herowcode-api.loadbalancer.server.port=4000",
     )
     expect(yaml).toContain(
-      "--label traefik.http.routers.herowcode-api.middlewares=compress,sec-headers",
+      "--label traefik.http.routers.herowcode-api.middlewares=compress@file,sec-headers@file",
     )
   })
 
@@ -496,19 +504,19 @@ describe("generateDockerBlueGreen", () => {
       appType: "spa",
     })
     expect(yaml).toContain(
-      "--label traefik.http.routers.herowcode-api.middlewares=compress,sec-headers,cc-no-store",
+      "--label traefik.http.routers.herowcode-api.middlewares=compress@file,sec-headers@file,cc-no-store@file",
     )
     expect(yaml).toContain(
       '--label "traefik.http.routers.herowcode-api-assets.rule=',
     )
     expect(yaml).toContain(
-      "--label traefik.http.routers.herowcode-api-assets.middlewares=compress,sec-headers,cc-immutable",
+      "--label traefik.http.routers.herowcode-api-assets.middlewares=compress@file,sec-headers@file,cc-immutable@file",
     )
     expect(yaml).toContain(
       "--label traefik.http.routers.herowcode-api-assets.service=herowcode-api",
     )
     expect(yaml).toContain(
-      "--label traefik.http.routers.herowcode-api-media.middlewares=compress,sec-headers,cc-media",
+      "--label traefik.http.routers.herowcode-api-media.middlewares=compress@file,sec-headers@file,cc-media@file",
     )
   })
 
@@ -522,12 +530,12 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("herowcode-api-next-static.rule=")
     expect(yaml).toContain("PathPrefix(\\`/_next/static\\`)")
     expect(yaml).toContain(
-      "herowcode-api-next-static.middlewares=compress,sec-headers,cc-immutable",
+      "herowcode-api-next-static.middlewares=compress@file,sec-headers@file,cc-immutable@file",
     )
     expect(yaml).toContain("herowcode-api-next-image.rule=")
     expect(yaml).toContain("PathPrefix(\\`/_next/image\\`)")
     expect(yaml).toContain(
-      "herowcode-api-next-image.middlewares=compress,sec-headers,cc-next-image",
+      "herowcode-api-next-image.middlewares=compress@file,sec-headers@file,cc-next-image@file",
     )
   })
 
@@ -539,7 +547,7 @@ describe("generateDockerBlueGreen", () => {
       appType: "node-api",
     })
     expect(yaml).toContain(
-      "herowcode-api.middlewares=compress,sec-headers,api-ratelimit,cc-no-store",
+      "herowcode-api.middlewares=compress@file,sec-headers@file,api-ratelimit@file,cc-no-store@file",
     )
     // node-api has no path-based extras
     expect(yaml).not.toContain("herowcode-api-assets")
@@ -556,12 +564,12 @@ describe("generateDockerBlueGreen", () => {
     expect(yaml).toContain("herowcode-api-static.rule=")
     expect(yaml).toContain("PathPrefix(\\`/static\\`)")
     expect(yaml).toContain(
-      "herowcode-api-static.middlewares=compress,sec-headers,cc-media",
+      "herowcode-api-static.middlewares=compress@file,sec-headers@file,cc-media@file",
     )
     expect(yaml).toContain("herowcode-api-media.rule=")
     expect(yaml).toContain("PathPrefix(\\`/media\\`)")
     expect(yaml).toContain(
-      "herowcode-api-media.middlewares=compress,sec-headers,cc-public",
+      "herowcode-api-media.middlewares=compress@file,sec-headers@file,cc-public@file",
     )
   })
 
@@ -573,10 +581,10 @@ describe("generateDockerBlueGreen", () => {
       appType: "static",
     })
     expect(yaml).toContain(
-      "herowcode-api.middlewares=compress,sec-headers,cc-public",
+      "herowcode-api.middlewares=compress@file,sec-headers@file,cc-public@file",
     )
     expect(yaml).toContain(
-      "herowcode-api-assets.middlewares=compress,sec-headers,cc-immutable",
+      "herowcode-api-assets.middlewares=compress@file,sec-headers@file,cc-immutable@file",
     )
   })
 
@@ -603,13 +611,13 @@ describe("generateDockerBlueGreen", () => {
       traefikMiddlewares: ["compress"],
     })
     // root uses override (followed by line-continuation \, not preset chain)
-    expect(yaml).toContain("herowcode-api.middlewares=compress \\")
+    expect(yaml).toContain("herowcode-api.middlewares=compress@file \\")
     expect(yaml).not.toContain(
-      "herowcode-api.middlewares=compress,sec-headers,cc-no-store",
+      "herowcode-api.middlewares=compress@file,sec-headers@file,cc-no-store@file",
     )
     // path-based extras keep their fixed middlewares
     expect(yaml).toContain(
-      "herowcode-api-assets.middlewares=compress,sec-headers,cc-immutable",
+      "herowcode-api-assets.middlewares=compress@file,sec-headers@file,cc-immutable@file",
     )
   })
 
@@ -629,6 +637,18 @@ describe("generateDockerBlueGreen", () => {
     // root router does NOT declare service (Traefik infers it)
     expect(yaml).not.toContain(
       "--label traefik.http.routers.herowcode-api.service=",
+    )
+  })
+
+  it("preserves explicit @-provider on traefikMiddlewares and adds @file otherwise", () => {
+    const yaml = generateDockerBlueGreen({
+      ...baseParams,
+      useTraefik: true,
+      traefikDomain: "api.example.com",
+      traefikMiddlewares: ["my-mw@docker", "compress"],
+    })
+    expect(yaml).toContain(
+      "--label traefik.http.routers.herowcode-api.middlewares=my-mw@docker,compress@file",
     )
   })
 

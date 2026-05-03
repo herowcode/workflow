@@ -15,7 +15,7 @@ export interface IDockerBlueGreenParams {
   dockerNetworks: string[]
   containerPort?: string
   vpsPort?: string
-  envFilePath: string
+  envFilePath?: string
   team: TDockerTeam
   environment: TDockerEnvironment
   vpsUser?: string
@@ -158,8 +158,17 @@ export function generateDockerBlueGreen(
   } = params
 
   const presets = getAppTypePresets(appType)
-  const rootMiddlewares = traefikMiddlewares ?? presets.rootMiddlewares
-  const extraRouters = presets.extraRouters
+  const withFileProvider = (mw: string): string =>
+    mw.includes("@") ? mw : `${mw}@file`
+  const rootMiddlewares = (traefikMiddlewares ?? presets.rootMiddlewares).map(
+    withFileProvider,
+  )
+  const extraRouters: ITraefikExtraRouter[] = presets.extraRouters.map(
+    (router) => ({
+      ...router,
+      middlewares: router.middlewares.map(withFileProvider),
+    }),
+  )
 
   const normalizedNetworks = dockerNetworks
     .map((network) => network.trim())
@@ -242,7 +251,7 @@ ${cacheMounts
     `${indent}docker run -d`,
     `${indent}  --name ${appName}-green`,
     `${indent}  --network ${primaryNetwork}`,
-    `${indent}  --env-file ${envFilePath}`,
+    ...(envFilePath ? [`${indent}  --env-file ${envFilePath}`] : []),
     `${indent}  --label app=${appName}`,
     `${indent}  --label environment=${environment}`,
     `${indent}  --label team=${team}`,
@@ -312,7 +321,7 @@ ${cacheMounts
     `${indent}  --name ${appName}`,
     `${indent}  --restart unless-stopped`,
     `${indent}  --network ${primaryNetwork}`,
-    `${indent}  --env-file ${envFilePath}`,
+    ...(envFilePath ? [`${indent}  --env-file ${envFilePath}`] : []),
     ...(hasPublishedPort
       ? [
           `${indent}  -p 127.0.0.1:${normalizedVpsPort}:${normalizedContainerPort}`,

@@ -201,14 +201,15 @@ export async function main() {
     }
 
     const envFilePath = await p.text({
-      message: "Env file path on VPS (e.g. ~/api/.env)",
+      message: "Env file path on VPS (optional, e.g. ~/api/.env)",
       placeholder: "~/.env",
-      validate: (v) => (v.trim() ? undefined : "Env file path is required"),
     })
     if (p.isCancel(envFilePath)) {
       p.cancel("Operation cancelled.")
       process.exit(0)
     }
+    const normalizedEnvFilePath =
+      (envFilePath as string).trim() || undefined
 
     const vpsUser = await p.text({
       message: "VPS SSH username (e.g. ubuntu, deploy)",
@@ -397,7 +398,7 @@ export async function main() {
       dockerNetworks,
       containerPort,
       vpsPort,
-      envFilePath: envFilePath.trim(),
+      envFilePath: normalizedEnvFilePath,
       team: team as "FRONT" | "BACK" | "API" | "BOT" | "OTHER",
       environment: environment as "production" | "staging" | "development",
       vpsUser: (vpsUser as string)?.trim() || undefined,

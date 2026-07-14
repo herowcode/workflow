@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import * as p from "@clack/prompts"
 import pc from "picocolors"
+
 import { detectCacheMounts, detectPackageManager } from "./detect"
 import { generateCiTest } from "./workflows/ci-test"
 import {

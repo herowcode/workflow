@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+
 import { generateCiTest } from "./ci-test"
 
 const baseParams = {

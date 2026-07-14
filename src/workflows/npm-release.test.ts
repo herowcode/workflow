@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+
 import { generateNpmRelease } from "./npm-release"
 
 const baseNpmjs = {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+
 import { generateDockerBlueGreen, getAppTypePresets } from "./docker-blue-green"
 
 const baseParams = {
